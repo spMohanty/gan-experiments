@@ -4,6 +4,7 @@ import torch
 from torch import nn, optim
 from torch.autograd.variable import Variable
 from torchvision import transforms, datasets
+import math
 
 DATA_FOLDER = './torch_data/VGAN/MNIST'
 
@@ -22,10 +23,11 @@ data_loader = torch.utils.data.DataLoader(data, batch_size=100, shuffle=True)
 num_batches = len(data_loader)
 print(data)
 
+INPUT_SIZE = 784
 class Discriminator:
     def __init__(self):
         super(Discriminator, self).__init__()
-        self.n_features = 784
+        self.n_features = INPUT_SIZE
 
         self.hidden_layer_sizes = [1024, 512, 256]
 
@@ -58,3 +60,12 @@ class Discriminator:
         for layer in self.layers:
             x = layer(x)
         return x
+
+def images_to_vectors(images):
+    return images.view(images.size(0), INPUT_SIZE)
+def vectors_to_images(vector):
+    """
+    Assumes gray scale image of aspect ratio 1:1
+    In this case, its MNIST, so will be batch_size, 1, 28, 28
+    """
+    return vector.view(vectors.size(0), 1, int(math.sqrt(INPUT_SIZE)), int(math.sqrt(INPUT_SIZE)))
