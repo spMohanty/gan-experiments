@@ -23,11 +23,12 @@ data_loader = torch.utils.data.DataLoader(data, batch_size=100, shuffle=True)
 num_batches = len(data_loader)
 print(data)
 
-INPUT_SIZE = 784
+DISCRIMINATOR_INPUT_SIZE = 784
+NOISE_SIZE = 100
 class Discriminator:
     def __init__(self):
         super(Discriminator, self).__init__()
-        self.n_features = INPUT_SIZE
+        self.n_features = DISCRIMINATOR_INPUT_SIZE
 
         self.hidden_layer_sizes = [1024, 512, 256]
 
@@ -62,10 +63,50 @@ class Discriminator:
         return x
 
 def images_to_vectors(images):
-    return images.view(images.size(0), INPUT_SIZE)
+    return images.view(images.size(0), DISCRIMINATOR_INPUT_SIZE)
 def vectors_to_images(vector):
     """
     Assumes gray scale image of aspect ratio 1:1
     In this case, its MNIST, so will be batch_size, 1, 28, 28
     """
-    return vector.view(vectors.size(0), 1, int(math.sqrt(INPUT_SIZE)), int(math.sqrt(INPUT_SIZE)))
+    return vector.view(vectors.size(0), 1, int(math.sqrt(DISCRIMINATOR_INPUT_SIZE)), int(math.sqrt(DISCRIMINATOR_INPUT_SIZE)))
+
+
+
+class Generator:
+    def __init__(self):
+        super(Generator, self).__init__()
+
+        self.noise_size = NOISE_SIZE
+        self.output_size = DISCRIMINATOR_INPUT_SIZE #This is the input to the Discriminator network
+
+        self.hidden_layer_sizes = [256, 512, 1024]
+        self.layers = []
+
+        for _idx, layer_size in enumerate(self.hidden_layer_sizes):
+            if _idx == 0:
+                input_size = self.noise_size
+                output_size = layer_size
+            else:
+                input_size = self.hidden_layer_sizes[_idx-1]
+                output_size = layer_size
+
+            layer = nn.Sequential(
+                nn.Linear(input_size, output_size)
+            )
+            self.layers.append(layer)
+
+        self.out = nn.Sequential(
+            nn.Linear(self.hidden_layer_sizes[-1], self.output_size),
+            nn.Tanh()
+        )
+        self.layers.append(self.out)
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+def noise(size):
+    n = Variable(torch.randn(size, 100))
+    if torch.cuda.is_available(): return n.cuda()
+    return n
