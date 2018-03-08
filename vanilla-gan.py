@@ -6,9 +6,24 @@ from torch.autograd.variable import Variable
 from torchvision import transforms, datasets
 import math
 import torchvision.utils as vutils
+from PIL import Image
+
+from PlantVillage import PlantVillageDataset
 
 DATA_FOLDER = './torch_data/VGAN/MNIST'
 torch.set_default_tensor_type('torch.cuda.FloatTensor')
+
+def plantvillage_data():
+    compose = transforms.Compose(
+        [
+            transforms.Grayscale(1),
+            transforms.Resize((28, 28)),
+            transforms.ToTensor(),
+            transforms.Normalize((.5, .5, .5 ), (.5, .5, .5))
+        ]
+    )
+    dataset = PlantVillageDataset("data/mini-plantvillage", transform=compose)
+    return dataset
 
 def mnist_data():
     compose = transforms.Compose(
@@ -20,7 +35,7 @@ def mnist_data():
     out_dir = "{}/dataset".format(DATA_FOLDER)
     return datasets.MNIST(root=out_dir, train=True, transform=compose, download=True)
 
-data = mnist_data()
+data = plantvillage_data()
 data_loader = torch.utils.data.DataLoader(data, batch_size=100, shuffle=True)
 num_batches = len(data_loader)
 
@@ -198,9 +213,18 @@ loss_plot = TortillaLinePlotter(
     )
 )
 
-images_plot = TortillaImagesPlotter(
+images_plot_pred = TortillaImagesPlotter(
     experiment_name="gan-experiments",
     title="Generated Images",
+    opts=dict(
+        padding=5,
+        nrows=8
+    )
+)
+
+images_plot_train = TortillaImagesPlotter(
+    experiment_name="gan-experiments",
+    title="Training Images",
     opts=dict(
         padding=5,
         nrows=8
@@ -233,12 +257,17 @@ for epoch in range(num_epochs):
             time = epoch + n_batch*1.0/len(data_loader)
             loss_plot.append_plot(np.array([d_error.data[0], g_error.data[0]]), time)
             num_samples = 64
-            generated_sample = vectors_to_images(fake_data[:num_samples]).data.cpu()
+            generated_sample = (vectors_to_images(fake_data[:num_samples]).data.cpu() * 0.5) + 0.5
+            training_sample = (vectors_to_images(real_batch[:num_samples]).cpu() * 0.5) + 0.5
 
             # generated_sample = vutils.make_grid(generated_sample, normalize=True, scale_each=True)
 
-            # images_plot.update_images(real_batch[:64].cpu())
-            images_plot.update_images(generated_sample)
+            # images_plot_pred.update_images(real_batch[:64].cpu())
+            images_plot_pred.update_images(generated_sample)
+            images_plot_train.update_images(training_sample)
+
+            im = Image.fromarray(generated_sample.numpy())
+            im.save('{}/Generated_epoch_{}_{}.jpg'.format("checkpoints", epoch, n_batch))
 
             print(d_error.data[0], g_error.data[0], epoch, n_batch, num_batches)
 

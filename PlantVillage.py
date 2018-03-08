@@ -43,7 +43,7 @@ if __name__ == "__main__":
         transforms.ToTensor()
     ])
     dataset = PlantVillageDataset("data/mini-plantvillage", transform=pv_transforms)
-
     img, label = dataset[0]
-    print(img.shape)
-    print(label)
+    data_loader = torch.utils.data.DataLoader(dataset, batch_size=100, shuffle=True)
+
+    print(len(data_loader))
