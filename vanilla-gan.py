@@ -5,6 +5,7 @@ from torch import nn, optim
 from torch.autograd.variable import Variable
 from torchvision import transforms, datasets
 import math
+import torchvision.utils as vutils
 
 DATA_FOLDER = './torch_data/VGAN/MNIST'
 torch.set_default_tensor_type('torch.cuda.FloatTensor')
@@ -26,42 +27,40 @@ num_batches = len(data_loader)
 DISCRIMINATOR_INPUT_SIZE = 784
 NOISE_SIZE = 100
 class Discriminator(torch.nn.Module):
+    """
+    A three hidden-layer discriminative neural network
+    """
     def __init__(self):
         super(Discriminator, self).__init__()
-        self.n_features = DISCRIMINATOR_INPUT_SIZE
+        n_features = 784
+        n_out = 1
 
-        self.hidden_layer_sizes = [1024, 512, 256]
-
-        self.n_out = 1
-
-        self.layers = []
-        for _idx, layer_size in enumerate(self.hidden_layer_sizes):
-            if _idx == 0:
-                input_size = self.n_features
-                output_size = layer_size
-            else:
-                input_size = self.hidden_layer_sizes[_idx-1]
-                output_size = layer_size
-
-            layer = nn.Sequential(
-                nn.Linear(input_size, output_size),
-                nn.LeakyReLU(0.2),
-                nn.Dropout(0.3)
-            )
-
-            self.layers.append(layer)
-
-        self.out = nn.Sequential(
-            nn.Linear(self.hidden_layer_sizes[-1], self.n_out),
-            nn.Sigmoid()
+        self.hidden0 = nn.Sequential(
+            nn.Linear(n_features, 1024),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.3)
         )
-        self.layers.append(self.out)
+        self.hidden1 = nn.Sequential(
+            nn.Linear(1024, 512),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.3)
+        )
+        self.hidden2 = nn.Sequential(
+            nn.Linear(512, 256),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.3)
+        )
+        self.out = nn.Sequential(
+            torch.nn.Linear(256, n_out),
+            torch.nn.Sigmoid()
+        )
 
     def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
+        x = self.hidden0(x)
+        x = self.hidden1(x)
+        x = self.hidden2(x)
+        x = self.out(x)
         return x
-
 def images_to_vectors(images):
     return images.view(images.size(0), DISCRIMINATOR_INPUT_SIZE)
 def vectors_to_images(vector):
@@ -69,41 +68,42 @@ def vectors_to_images(vector):
     Assumes gray scale image of aspect ratio 1:1
     In this case, its MNIST, so will be batch_size, 1, 28, 28
     """
-    return vector.view(vectors.size(0), 1, int(math.sqrt(DISCRIMINATOR_INPUT_SIZE)), int(math.sqrt(DISCRIMINATOR_INPUT_SIZE)))
+    return vector.view(vector.size(0), 1, int(math.sqrt(DISCRIMINATOR_INPUT_SIZE)), int(math.sqrt(DISCRIMINATOR_INPUT_SIZE)))
 
 
 
 class Generator(torch.nn.Module):
+    """
+    A three hidden-layer generative neural network
+    """
     def __init__(self):
         super(Generator, self).__init__()
+        n_features = 100
+        n_out = 784
 
-        self.noise_size = NOISE_SIZE
-        self.output_size = DISCRIMINATOR_INPUT_SIZE #This is the input to the Discriminator network
-
-        self.hidden_layer_sizes = [256, 512, 1024]
-        self.layers = []
-
-        for _idx, layer_size in enumerate(self.hidden_layer_sizes):
-            if _idx == 0:
-                input_size = self.noise_size
-                output_size = layer_size
-            else:
-                input_size = self.hidden_layer_sizes[_idx-1]
-                output_size = layer_size
-
-            layer = nn.Sequential(
-                nn.Linear(input_size, output_size)
-            )
-            self.layers.append(layer)
+        self.hidden0 = nn.Sequential(
+            nn.Linear(n_features, 256),
+            nn.LeakyReLU(0.2)
+        )
+        self.hidden1 = nn.Sequential(
+            nn.Linear(256, 512),
+            nn.LeakyReLU(0.2)
+        )
+        self.hidden2 = nn.Sequential(
+            nn.Linear(512, 1024),
+            nn.LeakyReLU(0.2)
+        )
 
         self.out = nn.Sequential(
-            nn.Linear(self.hidden_layer_sizes[-1], self.output_size),
+            nn.Linear(1024, n_out),
             nn.Tanh()
         )
-        self.layers.append(self.out)
+
     def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
+        x = self.hidden0(x)
+        x = self.hidden1(x)
+        x = self.hidden2(x)
+        x = self.out(x)
         return x
 
 def noise(size):
@@ -124,8 +124,8 @@ if torch.cuda.is_available():
 
 
 # Instantiate optimizers
-d_optimizer = optim.Adam(discriminator.parameters(), lr=0.0002)
-g_optimizer = optim.Adam(generator.parameters(), lr=0.0002)
+d_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001)
+g_optimizer = optim.Adam(generator.parameters(), lr=0.0001)
 
 # Loss function
 loss = nn.BCELoss()
@@ -180,6 +180,40 @@ num_test_samples = 16
 test_noise =    noise(num_test_samples)
 
 
+"""
+Setup Plotters
+"""
+
+from plotter import *
+
+loss_plot = TortillaLinePlotter(
+    experiment_name="gan-experiments",
+    fields=["discriminator_error", "generator_error"],
+    title="Loss",
+    opts=dict(
+        xtickmin=0,
+        xtickmax=num_epochs,
+        xlabel="Epochs",
+        ylabel="Loss"
+    )
+)
+
+images_plot = TortillaImagesPlotter(
+    experiment_name="gan-experiments",
+    title="Generated Images",
+    opts=dict(
+        padding=5,
+        nrows=8
+    )
+)
+
+def save_models(generator, discriminator, epoch):
+    print("Saving checkpoint....")
+    torch.save(generator.state_dict(),
+               '{}/G_epoch_{}'.format("checkpoints", epoch))
+    torch.save(discriminator.state_dict(), '{}/D_epoch_{}'.format("checkpoints", epoch))
+
+# TRAIN
 for epoch in range(num_epochs):
     for n_batch, (real_batch, _) in enumerate(data_loader):
 
@@ -195,4 +229,17 @@ for epoch in range(num_epochs):
         fake_data = generator(noise(real_batch.size(0)))
         g_error = train_generator(g_optimizer, fake_data)
 
-        print(d_error, g_error, epoch, n_batch, num_batches)
+        if n_batch % 100 == 0:
+            time = epoch + n_batch*1.0/len(data_loader)
+            loss_plot.append_plot(np.array([d_error.data[0], g_error.data[0]]), time)
+            num_samples = 64
+            generated_sample = vectors_to_images(fake_data[:num_samples]).data.cpu()
+
+            # generated_sample = vutils.make_grid(generated_sample, normalize=True, scale_each=True)
+
+            # images_plot.update_images(real_batch[:64].cpu())
+            images_plot.update_images(generated_sample)
+
+            print(d_error.data[0], g_error.data[0], epoch, n_batch, num_batches)
+
+    save_models(generator, discriminator, epoch)

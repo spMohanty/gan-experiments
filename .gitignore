@@ -1,1 +1,4 @@
 torch_data/
+data/
+__pycache__/
+checkpoints/
